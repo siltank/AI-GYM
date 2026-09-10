@@ -11,6 +11,7 @@ services:
     environment:
       LM_STUDIO_URL: "http://host.docker.internal:2223"
       LLM_MODEL: "google/gemma-3-4b"
+      USDA_API_KEY: "PGzaboN74Pr9iuNk3PfINBX1wkdkpzcpvpV92CF0"
 
     command:
       - uvicorn

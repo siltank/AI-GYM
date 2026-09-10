@@ -52,3 +52,21 @@ class AnalyzeExerciseResponse(BaseModel):
     plateauDurationSec: int
     recomendation: ExerciseRecommendation
     aiAnalysis: str
+
+class FoodNutrition(BaseModel):
+        name: str
+        weight: float
+        calories: float
+        protein: float
+        fat: float
+        carbohydrates: float
+
+class NutritionTotal(BaseModel):
+        calories: float
+        protein: float
+        fat: float
+        carbohydrates: float
+
+class AnalyzeFoodImageResponse(BaseModel):
+        foods: list[FoodNutrition]
+        total: NutritionTotal

@@ -13,7 +13,6 @@ router = APIRouter(
     tags=["Analysis"],
 )
 
-
 @router.post(
     "/exercise",
     response_model=AnalyzeExerciseResponse,

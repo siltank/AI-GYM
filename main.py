@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 
-from api.routes.analysis import router as analysis_router
+from api.routes.analysis import (
+    router as analysis_router,
+)
+
+from api.routes.nutrition import (
+    router as nutrition_router,
+)
 
 
 app = FastAPI(
@@ -10,7 +16,13 @@ app = FastAPI(
 )
 
 
-app.include_router(analysis_router)
+app.include_router(
+    analysis_router
+)
+
+app.include_router(
+    nutrition_router
+)
 
 
 @app.get("/health")
