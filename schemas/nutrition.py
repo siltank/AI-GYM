@@ -34,15 +34,6 @@ class NutritionGoalResponse(BaseModel):
     carbohydrates: float
 
 
-# -------------------------
-# Food
-# -------------------------
-
-class DetectedFood(BaseModel):
-    name: str
-    weight: float
-
-
 class FoodNutrition(BaseModel):
     name: str
     weight: float
@@ -59,23 +50,6 @@ class NutritionTotal(BaseModel):
     carbohydrates: float
 
 
-# -------------------------
-# Image
-# -------------------------
-
 class AnalyzeFoodImageResponse(BaseModel):
-    foods: list[FoodNutrition]
-    total: NutritionTotal
-
-
-# -------------------------
-# Text
-# -------------------------
-
-class AnalyzeFoodTextRequest(BaseModel):
-    text: str
-
-
-class AnalyzeFoodTextResponse(BaseModel):
     foods: list[FoodNutrition]
     total: NutritionTotal

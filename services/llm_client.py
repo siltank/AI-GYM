@@ -23,51 +23,76 @@ async def generate(
 
     url = f"{LM_STUDIO_URL}/v1/chat/completions"
 
-    system_content = (
-        "Ты AI-тренер приложения AI Gym. "
-        "Анализируй данные пользователя. "
-        "Не выдумывай данные, которых нет во входном запросе. "
-        "Отвечай кратко и понятно. "
-        "Не используй Markdown, символы **, *, #, _, ``` "
-        "или другие элементы форматирования."
-    )
+    # =========================
+    # IMAGE REQUEST
+    # =========================
 
     if image_base64 is not None:
 
-        user_content = [
+        if not content_type:
+            content_type = "image/jpeg"
+
+        messages = [
             {
-                "type": "text",
-                "text": prompt,
-            },
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": (
-                        f"data:{content_type};"
-                        f"base64,{image_base64}"
-                    )
-                },
-            },
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": prompt,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": (
+                                "data:image/jpeg;base64,"
+                                +f"{image_base64}"
+                            )
+                        },
+                    },
+                ],
+            }
         ]
+
+    # =========================
+    # TEXT REQUEST
+    # =========================
 
     else:
 
-        user_content = prompt
-
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
+        messages = [
             {
                 "role": "system",
-                "content": system_content,
+                "content": (
+                    "Ты AI-тренер приложения AI Gym. "
+                    "Анализируй данные пользователя "
+                    "и давай краткие, понятные рекомендации. "
+                    "Не выдумывай данные, которых нет "
+                    "во входном запросе. "
+                    "Python уже выполнил все математические "
+                    "расчёты и определил рекомендацию. "
+                    "Не изменяй числовые значения, "
+                    "рассчитанные Python. "
+                    "Не придумывай другой рекомендуемый вес. "
+                    "Если передан suggestedWeight, "
+                    "используй именно его. "
+                    "Не используй Markdown."
+                ),
             },
             {
                 "role": "user",
-                "content": user_content,
+                "content": prompt,
             },
-        ],
+        ]
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
         "temperature": temperature,
     }
+
+    print("LLM URL:", url)
+    print("LLM MODEL:", MODEL_NAME)
+    print("HAS IMAGE:", image_base64 is not None)
 
     async with httpx.AsyncClient(
         timeout=120.0
@@ -78,7 +103,11 @@ async def generate(
             json=payload,
         )
 
+    print("LLM STATUS:", response.status_code)
+
     if response.status_code != 200:
+        print("LLM ERROR:", response.text)
+
         raise RuntimeError(
             f"LM Studio error "
             f"{response.status_code}: "
@@ -94,7 +123,10 @@ async def generate(
             "LM Studio returned no choices"
         )
 
-    message = choices[0].get("message", {})
+    message = choices[0].get(
+        "message",
+        {},
+    )
 
     content = message.get("content")
 
@@ -102,5 +134,7 @@ async def generate(
         raise RuntimeError(
             "LM Studio returned empty content"
         )
+
+    print("LLM RESPONSE:", content)
 
     return content.strip()

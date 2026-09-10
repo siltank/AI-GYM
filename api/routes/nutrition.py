@@ -1,32 +1,14 @@
-from fastapi import (
-    APIRouter,
-    File,
-    HTTPException,
-    UploadFile,
-)
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from schemas.nutrition import (
     AnalyzeFoodImageResponse,
-    AnalyzeFoodTextRequest,
-    AnalyzeFoodTextResponse,
-    NutritionGoalRequest,
-    NutritionGoalResponse,
+    FoodNutrition,
+    NutritionTotal,
 )
-
-from services.food_image_analyzer import (
-    analyze_food_image,
-)
-
+from services.food_image_analyzer import analyze_food_image
 from services.food_nutrition import (
     calculate_food_nutrition,
-)
-
-from services.food_text_analyzer import (
-    analyze_food_text,
-)
-
-from services.nutrition_calculator import (
-    calculate_nutrition_goal,
+    calculate_total_nutrition,
 )
 
 
@@ -37,128 +19,140 @@ router = APIRouter(
 
 
 @router.post(
-    "/goal",
-    response_model=NutritionGoalResponse,
-)
-def calculate_goal(
-    request: NutritionGoalRequest,
-) -> NutritionGoalResponse:
-
-    return calculate_nutrition_goal(request)
-
-
-@router.post(
-    "/analyze-text",
-    response_model=AnalyzeFoodTextResponse,
-)
-async def analyze_food_text_endpoint(
-    request: AnalyzeFoodTextRequest,
-) -> AnalyzeFoodTextResponse:
-
-    if not request.text.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Text cannot be empty",
-        )
-
-    try:
-
-        foods = await analyze_food_text(
-            request.text
-        )
-
-        if not foods:
-            raise HTTPException(
-                status_code=400,
-                detail="No food products detected",
-            )
-
-        nutrition, total = (
-            await calculate_food_nutrition(
-                foods
-            )
-        )
-
-        return AnalyzeFoodTextResponse(
-            foods=nutrition,
-            total=total,
-        )
-
-    except HTTPException:
-        raise
-
-    except Exception as exception:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Food analysis failed: "
-                f"{exception}"
-            ),
-        )
-
-
-@router.post(
     "/analyze-image",
     response_model=AnalyzeFoodImageResponse,
 )
 async def analyze_food_image_endpoint(
-    image: UploadFile = File(...),
-) -> AnalyzeFoodImageResponse:
+    file: UploadFile = File(...),
+):
+    """
+    Анализ фотографии еды.
 
-    if not image.content_type:
+    Gemma определяет продукты и примерный вес.
+    USDA предоставляет пищевую ценность.
+    Python рассчитывает КБЖУ для указанного веса.
+    """
+
+    # Проверяем, что файл действительно является изображением
+    if not file.content_type:
         raise HTTPException(
             status_code=400,
-            detail="Image content type is required",
+            detail="Content-Type is missing",
         )
 
-    if not image.content_type.startswith(
-        "image/"
-    ):
+    if not file.content_type.startswith("image/"):
         raise HTTPException(
-            status_code=401,
-            detail="Uploaded file must be an image",
+            status_code=400,
+            detail="File must be an image",
         )
 
-    image_bytes = await image.read()
+    # Читаем изображение
+    image_bytes = await file.read()
 
     if not image_bytes:
         raise HTTPException(
-            status_code=402,
-            detail="Uploaded image is empty",
+            status_code=400,
+            detail="Image is empty",
         )
+
+    print(
+        "RECEIVED IMAGE:",
+        file.filename,
+        file.content_type,
+        len(image_bytes),
+    )
 
     try:
 
-        foods = await analyze_food_image(
+        # ------------------------------------------------
+        # 1. Gemma определяет продукты и их вес
+        # ------------------------------------------------
+
+        detected_foods = await analyze_food_image(
             image_bytes=image_bytes,
-            content_type=image.content_type,
+            content_type=file.content_type,
         )
 
-        if not foods:
-            raise HTTPException(
-                status_code=403,
-                detail="No food products detected",
+        print(
+            "DETECTED FOODS:",
+            detected_foods,
+        )
+
+        # Если Gemma не нашла еду
+        if not detected_foods:
+
+            return AnalyzeFoodImageResponse(
+                foods=[],
+                total=NutritionTotal(
+                    calories=0,
+                    protein=0,
+                    fat=0,
+                    carbohydrates=0,
+                ),
             )
 
-        nutrition, total = (
+        # ------------------------------------------------
+        # 2. USDA определяет пищевую ценность
+        # ------------------------------------------------
+
+        foods_with_nutrition = (
             await calculate_food_nutrition(
-                foods
+                detected_foods
             )
         )
+
+        print(
+            "FOODS WITH NUTRITION:",
+            foods_with_nutrition,
+        )
+
+        # ------------------------------------------------
+        # 3. Считаем общий КБЖУ фотографии
+        # ------------------------------------------------
+
+        total = calculate_total_nutrition(
+            foods_with_nutrition
+        )
+
+        print(
+            "TOTAL NUTRITION:",
+            total,
+        )
+
+        # ------------------------------------------------
+        # 4. Формируем response
+        # ------------------------------------------------
+
+        foods = [
+            FoodNutrition(
+                name=food["name"],
+                weight=food["weight"],
+                calories=food["calories"],
+                protein=food["protein"],
+                fat=food["fat"],
+                carbohydrates=food["carbohydrates"],
+            )
+            for food in foods_with_nutrition
+        ]
 
         return AnalyzeFoodImageResponse(
-            foods=nutrition,
-            total=total,
-        )
-
-    except HTTPException:
-        raise
-
-    except Exception as exception:
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Food analysis failed: "
-                f"{exception}"
+            foods=foods,
+            total=NutritionTotal(
+                calories=total["calories"],
+                protein=total["protein"],
+                fat=total["fat"],
+                carbohydrates=total["carbohydrates"],
             ),
         )
+
+    except Exception as exception:
+
+        print(
+            "NUTRITION ANALYSIS ERROR:",
+            repr(exception),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to analyze food image",
+        ) from exception

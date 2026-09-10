@@ -1,36 +1,40 @@
-from schemas.nutrition import (
-    FoodNutrition,
-    NutritionTotal,
-)
-
-from services.nutrition_api import (
-    find_food_nutrition,
-)
+from services.usda_client import usda_client
 
 
 async def calculate_food_nutrition(
     foods: list[dict],
-) -> tuple[
-    list[FoodNutrition],
-    NutritionTotal,
-]:
+) -> list[dict]:
 
     result = []
 
-    total_calories = 0.0
-    total_protein = 0.0
-    total_fat = 0.0
-    total_carbohydrates = 0.0
-
     for food in foods:
 
-        name = food["name"]
-        weight = float(food["weight"])
+        name = food.get("name")
+        weight = food.get("weight")
 
-        nutrition = await find_food_nutrition(
+        if not name or weight is None:
+            continue
+
+        try:
+            weight = float(weight)
+        except (TypeError, ValueError):
+            continue
+
+        if weight <= 0:
+            continue
+
+        # Ищем продукт в USDA
+        nutrition = await usda_client.get_food_nutrition(
             name
         )
 
+        if nutrition is None:
+            print(
+                f"USDA FOOD NOT FOUND: {name}"
+            )
+            continue
+
+        # USDA предоставляет значения на 100 г.
         multiplier = weight / 100.0
 
         calories = (
@@ -53,51 +57,74 @@ async def calculate_food_nutrition(
             * multiplier
         )
 
-        food_nutrition = FoodNutrition(
-            name=name,
-            weight=weight,
-            calories=round(
-                calories,
-                2,
-            ),
-            protein=round(
-                protein,
-                2,
-            ),
-            fat=round(
-                fat,
-                2,
-            ),
-            carbohydrates=round(
-                carbohydrates,
-                2,
-            ),
+        result.append(
+            {
+                "name": name,
+                "weight": round(weight, 1),
+                "calories": round(
+                    calories,
+                    1,
+                ),
+                "protein": round(
+                    protein,
+                    1,
+                ),
+                "fat": round(
+                    fat,
+                    1,
+                ),
+                "carbohydrates": round(
+                    carbohydrates,
+                    1,
+                ),
+            }
         )
 
-        result.append(food_nutrition)
+    return result
 
-        total_calories += calories
-        total_protein += protein
-        total_fat += fat
-        total_carbohydrates += carbohydrates
 
-    total = NutritionTotal(
-        calories=round(
-            total_calories,
-            2,
-        ),
-        protein=round(
-            total_protein,
-            2,
-        ),
-        fat=round(
-            total_fat,
-            2,
-        ),
-        carbohydrates=round(
-            total_carbohydrates,
-            2,
-        ),
-    )
+def calculate_total_nutrition(
+    foods: list[dict],
+) -> dict:
 
-    return result, total
+    calories = 0.0
+    protein = 0.0
+    fat = 0.0
+    carbohydrates = 0.0
+
+    for food in foods:
+
+        calories += float(
+            food.get("calories", 0)
+        )
+
+        protein += float(
+            food.get("protein", 0)
+        )
+
+        fat += float(
+            food.get("fat", 0)
+        )
+
+        carbohydrates += float(
+            food.get("carbohydrates", 0)
+        )
+
+    return {
+        "calories": round(
+            calories,
+            1,
+        ),
+        "protein": round(
+            protein,
+            1,
+        ),
+        "fat": round(
+            fat,
+            1,
+        ),
+        "carbohydrates": round(
+            carbohydrates,
+            1,
+        ),
+    }
